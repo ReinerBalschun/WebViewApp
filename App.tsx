@@ -120,17 +120,41 @@ export default App;*/
 
 
 
-import React from 'react';
-import { SafeAreaView, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { WebView } from 'react-native-webview';
 
 const App: React.FC = () => {
+  const [error, setError] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected ?? true);   
+
+      if (!state.isConnected)   
+ {
+        setError(true);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
-      <WebView 
-        source={{ uri: 'http://192.168.0.40:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto' }} // Hier die gewünschte URL eintragen
-        style={styles.webview}
-      />
+      {error || !isConnected ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Verbindung zum Server fehlgeschlagen! Passe die URL an!</Text>
+        </View>
+      ) : (
+        <WebView
+          source={{ uri: 'http://10.255.33.39:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto' }}
+          style={styles.webview}
+          onError={() => setError(true)}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -141,6 +165,15 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 18,
+    textAlign: 'center',
   },
 });
 
