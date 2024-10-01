@@ -150,7 +150,7 @@ const App: React.FC = () => {
         </View>
       ) : (
         <WebView
-          source={{ uri: 'http://10.255.33.39:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto' }}
+          source={{ uri: 'http://172.16.10.29:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto' }}
           style={styles.webview}
           onError={() => setError(true)}
         />
@@ -162,6 +162,7 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#C02020',
   },
   webview: {
     flex: 1,
