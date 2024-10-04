@@ -1,159 +1,159 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-/**import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
-
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
-
-  return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
-
-export default App;*/
-
-
-
-
 import React, { useState, useEffect } from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
+import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 
 const App: React.FC = () => {
-  const [error, setError] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
+  const [ipAddress, setIpAddress] = useState<string>(''); // Zustand für die eingegebene IP-Adresse
+  const [url, setUrl] = useState<string | null>(null); // Zustand für die dynamisch erstellte URL
+  const [isLoading, setIsLoading] = useState<boolean>(false); // Zustand für den Ladebildschirm
+  const [pingMessage, setPingMessage] = useState<string>(''); // Nachricht für den Ladebildschirm
 
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setIsConnected(state.isConnected ?? true);   
+  // Funktion zum Speichern der IP-Adresse im lokalen Speicher
+  const saveIpAddress = async (ip: string) => {
+    try {
+      await AsyncStorage.setItem('savedIp', ip);
+    } catch (error) {
+      console.error('Fehler beim Speichern der IP-Adresse', error);
+    }
+  };
 
-      if (!state.isConnected)   
- {
-        setError(true);
+  // Funktion zum Laden der gespeicherten IP-Adresse
+  const loadSavedIp = async () => {
+    try {
+      const savedIp = await AsyncStorage.getItem('savedIp');
+      if (savedIp) {
+        return savedIp;
       }
-    });
+      return null;
+    } catch (error) {
+      console.error('Fehler beim Laden der gespeicherten IP-Adresse', error);
+      return null;
+    }
+  };
 
-    return () => unsubscribe();
+  // Funktion zum Validieren der eingegebenen IPv4-Adresse
+  const validateIpAddress = (ip: string) => {
+    const ipv4Regex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    return ipv4Regex.test(ip);
+  };
+
+  // Funktion zum Pingen der URL mit Timeout
+  const pingUrl = async (url: string, timeout = 5000) => {
+    // Timeout-Promise
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), timeout)
+    );
+
+    try {
+      const fetchPromise = fetch(url, { method: 'HEAD' }); // HEAD-Anfrage zum Überprüfen der Verbindung
+      const response = await Promise.race([fetchPromise, timeoutPromise]); // Rennen zwischen Fetch und Timeout
+
+      // Wenn die Antwort kommt und ok ist (status 200-299)
+      if (response && (response as Response).ok) {
+        return true; // Ping erfolgreich
+      } else {
+        return false; // Ping fehlgeschlagen oder Timeout
+      }
+    } catch (error) {
+      return false; // Fehler beim Pingen (z.B. Netzwerkproblem)
+    }
+  };
+
+  // App beim Start: Prüfe, ob eine IP gespeichert ist, und frage den Benutzer, ob er diese verwenden möchte
+  useEffect(() => {
+    const checkPreviousIp = async () => {
+      const savedIp = await loadSavedIp();
+      if (savedIp) {
+        Alert.alert(
+          'Gespeicherte IP gefunden',
+          `Möchtest du die gespeicherte IP (${savedIp}) verwenden?`,
+          [
+            {
+              text: 'Neue IP eingeben',
+              onPress: () => setIsLoading(false),
+              style: 'cancel',
+            },
+            {
+              text: 'Gespeicherte IP verwenden',
+              onPress: async () => {
+                const fullUrl = `http://${savedIp}:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto`;
+                setIsLoading(true); // Ladebildschirm anzeigen
+                setPingMessage('Versuche gespeicherte IP zu pingen...');
+
+                const pingSuccess = await pingUrl(fullUrl);
+                if (pingSuccess) {
+                  setPingMessage('Ping war erfolgreich. Neustart...');
+                  setTimeout(() => {
+                    setUrl(fullUrl); // Setze die URL für den WebView
+                    setIsLoading(false); // Ladebildschirm ausblenden
+                  }, 1000);
+                } else {
+                  setIsLoading(false); // Ladebildschirm ausblenden
+                  Alert.alert('Ping fehlgeschlagen', 'Bitte gib eine neue IP-Adresse ein.');
+                }
+              },
+            },
+          ]
+        );
+      }
+    };
+
+    checkPreviousIp();
   }, []);
+
+  // Funktion zum Setzen der URL nach Eingabe der IP-Adresse und Pingen
+  const handleSetUrl = async () => {
+    if (validateIpAddress(ipAddress)) {
+      setIsLoading(true); // Ladebildschirm anzeigen
+      const fullUrl = `http://${ipAddress}:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto`;
+      setPingMessage('Versuche, die IP mit der URL zu pingen...');
+
+      const pingSuccess = await pingUrl(fullUrl, 5000); // 5 Sekunden Timeout
+      if (pingSuccess) {
+        setPingMessage('Ping war erfolgreich. Verbindung wird aufgebaut...');
+        await saveIpAddress(ipAddress); // Speichere die IP-Adresse
+
+        setTimeout(() => {
+          setUrl(fullUrl); // Setze die URL für den WebView
+          setIsLoading(false); // Ladebildschirm ausblenden
+        }, 1000);
+      } else {
+        setIsLoading(false); // Ladebildschirm ausblenden
+        Alert.alert('Ping fehlgeschlagen', 'Bitte gib eine andere IP-Adresse ein.');
+      }
+    } else {
+      Alert.alert('Ungültige IP-Adresse', 'Bitte gib eine gültige IPv4-Adresse ein.');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      {error || !isConnected ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Verbindung zum Server fehlgeschlagen! Passe die URL an!</Text>
+      {isLoading ? (
+        // Ladebildschirm anzeigen
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingText}>{pingMessage}</Text>
         </View>
+      ) : url ? (
+        // Zeige WebView an, wenn eine gültige URL gesetzt ist
+        <WebView source={{ uri: url }} style={styles.webview} />
       ) : (
-        <WebView
-          source={{ uri: 'http://172.16.10.29:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto' }}
-          style={styles.webview}
-          onError={() => setError(true)}
-        />
+        // Zeige IP-Eingabemaske, wenn keine URL vorhanden ist oder Ping fehlgeschlagen ist
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Bitte gib die IPv4-Adresse des Servers ein:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="z.B. 192.168.0.40"
+            placeholderTextColor="#888"
+            keyboardType="numeric"
+            value={ipAddress}
+            onChangeText={setIpAddress}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Button title="Bestätigen" onPress={handleSetUrl} />
+        </View>
       )}
     </SafeAreaView>
   );
@@ -167,14 +167,37 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
   },
-  errorContainer: {
+  inputContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  label: {
+    fontSize: 18,
+    color: '#fff',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  input: {
+    width: '80%',
+    padding: 10,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    marginBottom: 20,
+    backgroundColor: '#fff',
+    color: '#000',
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  errorText: {
+  loadingText: {
     fontSize: 18,
-    textAlign: 'center',
+    color: '#fff',
+    marginTop: 10,
   },
 });
 
