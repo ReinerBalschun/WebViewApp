@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 
 const App: React.FC = () => {
+  const [showSplashScreen, setShowSplashScreen] = useState(true); // Zustand für den Splash-Screen
   const [ipAddress, setIpAddress] = useState<string>(''); // Zustand für die eingegebene IP-Adresse
   const [url, setUrl] = useState<string | null>(null); // Zustand für die dynamisch erstellte URL
   const [isLoading, setIsLoading] = useState<boolean>(false); // Zustand für den Ladebildschirm
@@ -100,6 +101,15 @@ const App: React.FC = () => {
     };
 
     checkPreviousIp();
+
+     // --- Neuer Code für den Splash Screen ---
+     const splashTimeout = setTimeout(() => {
+      setShowSplashScreen(false);
+    }, 3000); 
+
+    return () => clearTimeout(splashTimeout); 
+    // --- Ende des neuen Codes ---
+
   }, []);
 
   // Funktion zum Setzen der URL nach Eingabe der IP-Adresse und Pingen
@@ -129,31 +139,45 @@ const App: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {isLoading ? (
-        // Ladebildschirm anzeigen
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={styles.loadingText}>{pingMessage}</Text>
-        </View>
-      ) : url ? (
-        // Zeige WebView an, wenn eine gültige URL gesetzt ist
-        <WebView source={{ uri: url }} style={styles.webview} />
-      ) : (
-        // Zeige IP-Eingabemaske, wenn keine URL vorhanden ist oder Ping fehlgeschlagen ist
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Bitte gib die IPv4-Adresse des Servers ein:</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="z.B. 192.168.0.40"
-            placeholderTextColor="#888"
-            keyboardType="numeric"
-            value={ipAddress}
-            onChangeText={setIpAddress}
-            autoCapitalize="none"
-            autoCorrect={false}
+      {showSplashScreen ? (
+        // Splash Screen anzeigen
+        <View style={styles.splashScreen}>
+          <Image 
+            source={require('./assets/Reiners Grafana Dashboard Splashscreen.webp')} // Pfad zu deinem Logo anpassen
+            style={styles.logo} 
+            resizeMode="contain" 
           />
-          <Button title="Bestätigen" onPress={handleSetUrl} />
         </View>
+      ) : (
+        // Der gesamte bisherige Code aus dem SafeAreaView-Abschnitt kommt hier rein
+        <> 
+          {isLoading ? (
+            // Ladebildschirm anzeigen
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FFFFFF" />
+              <Text style={styles.loadingText}>{pingMessage}</Text>
+            </View>
+          ) : url ? (
+            // Zeige WebView an, wenn eine gültige URL gesetzt ist
+            <WebView source={{ uri: url }} style={styles.webview} />
+          ) : (
+            // Zeige IP-Eingabemaske, wenn keine URL vorhanden ist oder Ping fehlgeschlagen ist
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Bitte gib die IPv4-Adresse des Servers ein:</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="z.B. 192.168.0.40"
+                placeholderTextColor="#888"
+                keyboardType="numeric"
+                value={ipAddress}
+                onChangeText={setIpAddress}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Button title="Bestätigen" onPress={handleSetUrl} />
+            </View>
+          )}
+        </>
       )}
     </SafeAreaView>
   );
@@ -162,7 +186,7 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#C02020',
+    backgroundColor: '#212121',
   },
   webview: {
     flex: 1,
@@ -175,30 +199,41 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 18,
-    color: '#fff',
+    color: '#FFFFFF',
     marginBottom: 10,
     textAlign: 'center',
   },
   input: {
     width: '80%',
     padding: 10,
-    borderColor: '#ccc',
+    borderColor: '#757575',
     borderWidth: 1,
     borderRadius: 5,
     marginBottom: 20,
-    backgroundColor: '#fff',
-    color: '#000',
+    backgroundColor: '#424242',
+    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#212121',
   },
   loadingText: {
     fontSize: 18,
     color: '#fff',
     marginTop: 10,
   },
+  splashScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#212121',
+  },
+  logo: {
+    width: 200,
+    height: 200,
+  }
 });
 
 export default App;
