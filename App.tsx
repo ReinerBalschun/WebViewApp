@@ -1,14 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert, Image, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
+import init from 'sp-react-native-mqtt';
+import { Buffer } from 'buffer';
+
+declare var Paho: {
+  MQTT: {
+    Client: new (host: string, port: number, clientId: string) => any;
+    Message: new (payload: string) => any;
+  }
+};
+
+// Add type declaration for init
+declare module 'sp-react-native-mqtt' {
+  export default function init(config: {
+    size: number;
+    storageBackend: any;
+    defaultExpires: number;
+    enableCache: boolean;
+    sync: object;
+  }): void;
+}
+
+init({
+  size: 10000,
+  storageBackend: AsyncStorage,
+  defaultExpires: 1000 * 3600 * 24,
+  enableCache: true,
+  sync: {},
+});
 
 const App: React.FC = () => {
-  const [showSplashScreen, setShowSplashScreen] = useState(true); // Zustand für den Splash-Screen
-  const [ipAddress, setIpAddress] = useState<string>(''); // Zustand für die eingegebene IP-Adresse
-  const [url, setUrl] = useState<string | null>(null); // Zustand für die dynamisch erstellte URL
-  const [isLoading, setIsLoading] = useState<boolean>(false); // Zustand für den Ladebildschirm
-  const [pingMessage, setPingMessage] = useState<string>(''); // Nachricht für den Ladebildschirm
+  const [showSplashScreen, setShowSplashScreen] = useState(true);
+  const [ipAddress, setIpAddress] = useState<string>('');
+  const [url, setUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [pingMessage, setPingMessage] = useState<string>('');
+  const [counter, setCounter] = useState(0);
+  const [mqttClient, setMqttClient] = useState<any>(null);
 
   // Funktion zum Speichern der IP-Adresse im lokalen Speicher
   const saveIpAddress = async (ip: string) => {
@@ -50,7 +80,6 @@ const App: React.FC = () => {
       const fetchPromise = fetch(url, { method: 'HEAD' }); // HEAD-Anfrage zum Überprüfen der Verbindung
       const response = await Promise.race([fetchPromise, timeoutPromise]); // Rennen zwischen Fetch und Timeout
 
-      // Wenn die Antwort kommt und ok ist (status 200-299)
       if (response && (response as Response).ok) {
         return true; // Ping erfolgreich
       } else {
@@ -78,7 +107,7 @@ const App: React.FC = () => {
             {
               text: 'Gespeicherte IP verwenden',
               onPress: async () => {
-                const fullUrl = `http://${savedIp}:3000/public-dashboards/f9911416ee584c1fa54729be95e945e1?orgId=1&refresh=auto`;
+                const fullUrl = `http://${savedIp}:3000/public-dashboards/2dc727942b8b4f01be0deb0e0b415aec?orgId=1&refresh=5s`;
                 setIsLoading(true); // Ladebildschirm anzeigen
                 setPingMessage('Versuche gespeicherte IP zu pingen...');
 
@@ -102,17 +131,47 @@ const App: React.FC = () => {
 
     checkPreviousIp();
 
-     // --- Neuer Code für den Splash Screen ---
-     const splashTimeout = setTimeout(() => {
+    const splashTimeout = setTimeout(() => {
       setShowSplashScreen(false);
-    }, 3000); 
+    }, 3000);
 
-    return () => clearTimeout(splashTimeout); 
-    // --- Ende des neuen Codes ---
-
+    return () => clearTimeout(splashTimeout);
   }, []);
 
-  // Funktion zum Setzen der URL nach Eingabe der IP-Adresse und Pingen
+  useEffect(() => {
+    const client = new Paho.MQTT.Client(
+      '192.168.178.40',
+      1883,
+      `client-${Math.random().toString(16).substr(2, 8)}`
+    );
+
+    client.connect({
+      onSuccess: () => {
+        console.log('Connected to MQTT broker');
+      },
+      useSSL: false,
+      onFailure: (e: Error) => console.log('Failed to connect:', e)
+    });
+
+    setMqttClient(client);
+
+    return () => {
+      if (client) {
+        client.disconnect();
+      }
+    };
+  }, []);
+
+  const handleMqttPress = () => {
+    if (mqttClient && mqttClient.isConnected()) {
+      const newCount = counter + 1;
+      setCounter(newCount);
+      const message = new Paho.MQTT.Message(`Test ${newCount}`);
+      message.destinationName = 'Test';
+      mqttClient.send(message);
+    }
+  };
+
   const handleSetUrl = async () => {
     if (validateIpAddress(ipAddress)) {
       setIsLoading(true); // Ladebildschirm anzeigen
@@ -149,8 +208,7 @@ const App: React.FC = () => {
           />
         </View>
       ) : (
-        // Der gesamte bisherige Code aus dem SafeAreaView-Abschnitt kommt hier rein
-        <> 
+        <>
           {isLoading ? (
             // Ladebildschirm anzeigen
             <View style={styles.loadingContainer}>
@@ -158,8 +216,15 @@ const App: React.FC = () => {
               <Text style={styles.loadingText}>{pingMessage}</Text>
             </View>
           ) : url ? (
-            // Zeige WebView an, wenn eine gültige URL gesetzt ist
-            <WebView source={{ uri: url }} style={styles.webview} />
+            <View style={styles.container}>
+              <WebView source={{ uri: url }} style={styles.webview} />
+              <TouchableOpacity 
+                style={styles.mqttButton}
+                onPress={handleMqttPress}
+              >
+                <Text style={styles.buttonText}>Send MQTT</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             // Zeige IP-Eingabemaske, wenn keine URL vorhanden ist oder Ping fehlgeschlagen ist
             <View style={styles.inputContainer}>
@@ -233,6 +298,19 @@ const styles = StyleSheet.create({
   logo: {
     width: 200,
     height: 200,
+  },
+  mqttButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: '#4CAF50',
+    padding: 15,
+    borderRadius: 10,
+    zIndex: 1000,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
   }
 });
 
