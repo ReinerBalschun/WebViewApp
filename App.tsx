@@ -618,51 +618,52 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const checkPreviousIp = async () => {
-      const savedIp = await loadSavedIp();
-      if (savedIp) {
-        Alert.alert(
-          'Gespeicherte IP gefunden',
-          `Möchtest du die gespeicherte IP (${savedIp}) verwenden?`,
-          [
-            {
-              text: 'Neue IP eingeben',
-              onPress: () => setIsLoading(false),
-              style: 'cancel',
-            },
-            {
-              text: 'Gespeicherte IP verwenden',
-              onPress: async () => {
-                const fullUrl = `http://${savedIp}:3000/public-dashboards/${dashboardId}?orgId=1&refresh=5s`;
-                setIsLoading(true);
-                setPingMessage('Versuche gespeicherte IP zu pingen...');
-
-                const pingSuccess = await pingUrl(fullUrl);
-                if (pingSuccess) {
-                  setPingMessage('Ping war erfolgreich. Neustart...');
-                  setTimeout(() => {
-                    setUrl(fullUrl);
-                    setIsLoading(false);
-                  }, 1000);
-                } else {
-                  setIsLoading(false);
-                  Alert.alert('Ping fehlgeschlagen', 'Bitte gib eine neue IP-Adresse ein.');
-                }
-              },
-            },
-          ]
-        );
-      }
-    };
-
-    checkPreviousIp();
-
     const splashTimeout = setTimeout(() => {
       setShowSplashScreen(false);
     }, 3000);
-
     return () => clearTimeout(splashTimeout);
   }, []);
+
+  const handleDashboardSelect = async (selectedDashboardId: string) => {
+    setDashboardId(selectedDashboardId);
+    const savedIp = await loadSavedIp();
+    
+    if (savedIp) {
+      Alert.alert(
+        'Gespeicherte IP gefunden',
+        `Möchtest du die gespeicherte IP (${savedIp}) verwenden?`,
+        [
+          {
+            text: 'Neue IP eingeben',
+            onPress: () => setIpAddress(''),
+            style: 'cancel',
+          },
+          {
+            text: 'Gespeicherte IP verwenden',
+            onPress: async () => {
+              setIpAddress(savedIp);
+              const fullUrl = `http://${savedIp}:3000/public-dashboards/${selectedDashboardId}?orgId=1&refresh=5s`;
+              setIsLoading(true);
+              setPingMessage('Versuche gespeicherte IP zu pingen...');
+
+              const pingSuccess = await pingUrl(fullUrl);
+              if (pingSuccess) {
+                setPingMessage('Ping war erfolgreich. Verbindung wird aufgebaut...');
+                setTimeout(() => {
+                  setUrl(fullUrl);
+                  setIsLoading(false);
+                }, 1000);
+              } else {
+                setIsLoading(false);
+                setIpAddress('');
+                Alert.alert('Ping fehlgeschlagen', 'Bitte gib eine neue IP-Adresse ein.');
+              }
+            },
+          },
+        ]
+      );
+    }
+  };
 
   const handleWebViewLoad = () => {
     try {
@@ -737,7 +738,7 @@ const App: React.FC = () => {
         setButtonText('Ventilator wird aktiviert');
         const message = new Message('Ventilator AN');
         message.destinationName = 'Ventilator';
-        message.retained = true;  // Add this line
+        message.retained = true;
         mqttClient.send(message);
         
         setTimeout(() => {
@@ -749,7 +750,7 @@ const App: React.FC = () => {
         setButtonText('Ventilator wird deaktiviert');
         const message = new Message('Ventilator AUS');
         message.destinationName = 'Ventilator';
-        message.retained = true;  // Add this line
+        message.retained = true;
         mqttClient.send(message);
         
         setTimeout(() => {
@@ -759,7 +760,7 @@ const App: React.FC = () => {
         }, 5000);
       }
     }
-  };  
+  };
 
   const handleSetUrl = async () => {
     if (validateIpAddress(ipAddress)) {
@@ -801,76 +802,72 @@ const App: React.FC = () => {
           <View style={styles.buttonGroup}>
             <Button 
               title="Produktion" 
-              onPress={() => setDashboardId('2dc727942b8b4f01be0deb0e0b415aec')} 
+              onPress={() => handleDashboardSelect('2dc727942b8b4f01be0deb0e0b415aec')} 
             />
             <View style={styles.buttonSpacer} />
             <Button 
               title="Dev" 
-              onPress={() => setDashboardId('f9911416ee584c1fa54729be95e945e1')} 
+              onPress={() => handleDashboardSelect('f9911416ee584c1fa54729be95e945e1')} 
             />
           </View>
         </View>
+      ) : !url && !isLoading ? (
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Bitte gib die IPv4-Adresse des Servers ein:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="z.B. 192.168.0.40"
+            placeholderTextColor="#888"
+            keyboardType="numeric"
+            value={ipAddress}
+            onChangeText={setIpAddress}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Button title="Bestätigen" onPress={handleSetUrl} />
+        </View>
+      ) : isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingText}>{pingMessage}</Text>
+        </View>
       ) : (
-        <>
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FFFFFF" />
-              <Text style={styles.loadingText}>{pingMessage}</Text>
-            </View>
-          ) : url ? (
-            <View style={styles.container}>
-              <WebView 
-                source={{ uri: url }} 
-                style={styles.webview}
-                onLoadEnd={handleWebViewLoad}
-                onError={(syntheticEvent) => {
-                  const { nativeEvent } = syntheticEvent;
-                  setCriticalError(`WebView error: ${nativeEvent.description}`);
-                }}
+        <View style={styles.container}>
+          <WebView 
+            source={{ uri: url! }} 
+            style={styles.webview}
+            onLoadEnd={handleWebViewLoad}
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              setCriticalError(`WebView error: ${nativeEvent.description}`);
+            }}
+          />
+          {criticalError && (
+            <View style={styles.errorOverlay}>
+              <Text style={styles.errorTitle}>Error Occurred</Text>
+              <Text style={styles.errorMessage}>{criticalError}</Text>
+              <Button 
+                title="Retry Connection" 
+                onPress={handleWebViewLoad} 
               />
-              {criticalError && (
-                <View style={styles.errorOverlay}>
-                  <Text style={styles.errorTitle}>Error Occurred</Text>
-                  <Text style={styles.errorMessage}>{criticalError}</Text>
-                  <Button 
-                    title="Retry Connection" 
-                    onPress={handleWebViewLoad} 
-                  />
-                </View>
-              )}
-              <View style={styles.buttonContainer}>
-                <Button 
-                  title={buttonText}
-                  onPress={handleVentilatorToggle}
-                  disabled={isButtonDisabled}
-                />
-                <Text style={styles.statusText}>
-                  MQTT Status: {mqttClient?.isConnected() ? 'Verbunden' : 'Nicht verbunden'}
-                </Text>
-                <ScrollView style={styles.errorFeed}>
-                  {errorMessages.map((error, index) => (
-                    <Text key={index} style={styles.errorText}>{error}</Text>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Bitte gib die IPv4-Adresse des Servers ein:</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="z.B. 192.168.0.40"
-                placeholderTextColor="#888"
-                keyboardType="numeric"
-                value={ipAddress}
-                onChangeText={setIpAddress}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Button title="Bestätigen" onPress={handleSetUrl} />
             </View>
           )}
-        </>
+          <View style={styles.buttonContainer}>
+            <Button 
+              title={buttonText}
+              onPress={handleVentilatorToggle}
+              disabled={isButtonDisabled}
+            />
+            <Text style={styles.statusText}>
+              MQTT Status: {mqttClient?.isConnected() ? 'Verbunden' : 'Nicht verbunden'}
+            </Text>
+            <ScrollView style={styles.errorFeed}>
+              {errorMessages.map((error, index) => (
+                <Text key={index} style={styles.errorText}>{error}</Text>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
       )}
     </SafeAreaView>
   );
