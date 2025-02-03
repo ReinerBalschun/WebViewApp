@@ -553,9 +553,10 @@ export default App; */
 // neuer Code stand 02.02.25
 
 import React, { useState, useEffect } from 'react';
-import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
+import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert, Image, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
+import { Client, Message } from 'paho-mqtt';
 
 const App: React.FC = () => {
   const [showSplashScreen, setShowSplashScreen] = useState(true);
@@ -565,6 +566,11 @@ const App: React.FC = () => {
   const [pingMessage, setPingMessage] = useState<string>('');
   const [isVentilatorOn, setIsVentilatorOn] = useState(false);
   const [dashboardId, setDashboardId] = useState<string>('');
+  const [mqttClient, setMqttClient] = useState<any>(null);
+  const [isButtonDisabled, setIsButtonDisabled] = useState(false);
+  const [buttonText, setButtonText] = useState('Ventilator AN');
+  const [errorMessages, setErrorMessages] = useState<string[]>([]);
+  const [criticalError, setCriticalError] = useState<string | null>(null);
 
   const saveIpAddress = async (ip: string) => {
     try {
@@ -658,6 +664,103 @@ const App: React.FC = () => {
     return () => clearTimeout(splashTimeout);
   }, []);
 
+  const handleWebViewLoad = () => {
+    try {
+      setErrorMessages(prev => [...prev, "Initializing MQTT connection..."]);
+      
+      if (!ipAddress) {
+        setCriticalError("IP Address not configured");
+        return;
+      }
+
+      const client = new Client(
+        ipAddress,
+        8083,
+        `client-${Math.random().toString(16).substring(2, 8)}`
+      );
+
+      client.onMessageArrived = (message: { payloadString: string }) => {
+        const msg = `Message received: ${message.payloadString}`;
+        console.log(msg);
+        setErrorMessages(prev => [...prev, msg]);
+        
+        if (message.payloadString === 'Ventilator AN') {
+          setIsVentilatorOn(true);
+          setButtonText('Ventilator AUS');
+        } else if (message.payloadString === 'Ventilator AUS') {
+          setIsVentilatorOn(false);
+          setButtonText('Ventilator AN');
+        }
+      };
+
+      client.onConnectionLost = (responseObject: { errorMessage: string }) => {
+        const error = `Connection lost: ${responseObject.errorMessage}`;
+        console.log(error);
+        setErrorMessages(prev => [...prev, error]);
+        setCriticalError(error);
+      };
+
+      const connectOptions = {
+        onSuccess: () => {
+          const msg = 'MQTT Connected successfully';
+          console.log(msg);
+          setErrorMessages(prev => [...prev, msg]);
+          setCriticalError(null);
+          setMqttClient(client);
+          client.subscribe('Ventilator');
+        },
+        onFailure: (e: { errorMessage: string; errorCode: number }) => {
+          const error = `MQTT Connection failed: ${e.errorMessage} (${e.errorCode})`;
+          console.log(error);
+          setErrorMessages(prev => [...prev, error]);
+          setCriticalError(error);
+        },
+        useSSL: false,
+        keepAliveInterval: 30,
+        reconnect: true
+      };
+
+      client.connect(connectOptions);
+    } catch (error) {
+      const errorMsg = `MQTT Setup error: ${error}`;
+      console.log(errorMsg);
+      setErrorMessages(prev => [...prev, errorMsg]);
+      setCriticalError(errorMsg);
+    }
+  };
+
+  const handleVentilatorToggle = () => {
+    if (mqttClient && mqttClient.isConnected() && !isButtonDisabled) {
+      setIsButtonDisabled(true);
+      
+      if (!isVentilatorOn) {
+        setButtonText('Ventilator wird aktiviert');
+        const message = new Message('Ventilator AN');
+        message.destinationName = 'Ventilator';
+        message.retained = true;  // Add this line
+        mqttClient.send(message);
+        
+        setTimeout(() => {
+          setIsVentilatorOn(true);
+          setButtonText('Ventilator AUS');
+          setIsButtonDisabled(false);
+        }, 5000);
+      } else {
+        setButtonText('Ventilator wird deaktiviert');
+        const message = new Message('Ventilator AUS');
+        message.destinationName = 'Ventilator';
+        message.retained = true;  // Add this line
+        mqttClient.send(message);
+        
+        setTimeout(() => {
+          setIsVentilatorOn(false);
+          setButtonText('Ventilator AN');
+          setIsButtonDisabled(false);
+        }, 5000);
+      }
+    }
+  };  
+
   const handleSetUrl = async () => {
     if (validateIpAddress(ipAddress)) {
       setIsLoading(true);
@@ -680,10 +783,6 @@ const App: React.FC = () => {
     } else {
       Alert.alert('Ungültige IP-Adresse', 'Bitte gib eine gültige IPv4-Adresse ein.');
     }
-  };
-
-  const handleVentilatorToggle = () => {
-    setIsVentilatorOn(!isVentilatorOn);
   };
 
   return (
@@ -720,11 +819,39 @@ const App: React.FC = () => {
             </View>
           ) : url ? (
             <View style={styles.container}>
-              <WebView source={{ uri: url }} style={styles.webview} />
+              <WebView 
+                source={{ uri: url }} 
+                style={styles.webview}
+                onLoadEnd={handleWebViewLoad}
+                onError={(syntheticEvent) => {
+                  const { nativeEvent } = syntheticEvent;
+                  setCriticalError(`WebView error: ${nativeEvent.description}`);
+                }}
+              />
+              {criticalError && (
+                <View style={styles.errorOverlay}>
+                  <Text style={styles.errorTitle}>Error Occurred</Text>
+                  <Text style={styles.errorMessage}>{criticalError}</Text>
+                  <Button 
+                    title="Retry Connection" 
+                    onPress={handleWebViewLoad} 
+                  />
+                </View>
+              )}
               <View style={styles.buttonContainer}>
-              <Button 
-              title={isVentilatorOn ? "Ventilator AUS" : "Ventilator AN"}
-              onPress={handleVentilatorToggle}/>
+                <Button 
+                  title={buttonText}
+                  onPress={handleVentilatorToggle}
+                  disabled={isButtonDisabled}
+                />
+                <Text style={styles.statusText}>
+                  MQTT Status: {mqttClient?.isConnected() ? 'Verbunden' : 'Nicht verbunden'}
+                </Text>
+                <ScrollView style={styles.errorFeed}>
+                  {errorMessages.map((error, index) => (
+                    <Text key={index} style={styles.errorText}>{error}</Text>
+                  ))}
+                </ScrollView>
               </View>
             </View>
           ) : (
@@ -813,6 +940,52 @@ const styles = StyleSheet.create({
   buttonSpacer: {
     width: 20,
   },
+  statusText: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  errorFeed: {
+    maxHeight: 100,
+    marginTop: 10,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    marginBottom: 5,
+  },
+  errorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorTitle: {
+    color: '#FF6B6B',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  errorMessage: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  }
 });
 
 export default App;
+
+
+
+
+
+
+
+
+
