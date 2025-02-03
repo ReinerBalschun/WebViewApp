@@ -552,13 +552,14 @@ export default App; */
 
 // neuer Code stand 02.02.25
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SafeAreaView, StyleSheet, Text, View, Button, TextInput, ActivityIndicator, Alert, Image, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 import { Client, Message } from 'paho-mqtt';
 
 const App: React.FC = () => {
+  const scrollViewRef = useRef<ScrollView>(null);
   const [showSplashScreen, setShowSplashScreen] = useState(true);
   const [ipAddress, setIpAddress] = useState<string>('');
   const [url, setUrl] = useState<string | null>(null);
@@ -791,9 +792,8 @@ const App: React.FC = () => {
       {showSplashScreen ? (
         <View style={styles.splashScreen}>
           <Image 
-            source={require('./assets/Reiners Grafana Dashboard Splashscreen.webp')}
-            style={styles.logo} 
-            resizeMode="contain" 
+            source={require('./assets/images/Splashscreen.jpeg')}
+            style={styles.logo}
           />
         </View>
       ) : !dashboardId ? (
@@ -824,7 +824,11 @@ const App: React.FC = () => {
             autoCapitalize="none"
             autoCorrect={false}
           />
-          <Button title="Bestätigen" onPress={handleSetUrl} />
+          <View style={styles.buttonGroup}>
+            <Button title="Zurück" onPress={() => setDashboardId('')} />
+            <View style={styles.buttonSpacer} />
+            <Button title="Bestätigen" onPress={handleSetUrl} />
+          </View>
         </View>
       ) : isLoading ? (
         <View style={styles.loadingContainer}>
@@ -861,9 +865,13 @@ const App: React.FC = () => {
             <Text style={styles.statusText}>
               MQTT Status: {mqttClient?.isConnected() ? 'Verbunden' : 'Nicht verbunden'}
             </Text>
-            <ScrollView style={styles.errorFeed}>
+            <ScrollView 
+              ref={scrollViewRef}
+              style={styles.errorFeed}
+              onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+              >
               {errorMessages.map((error, index) => (
-                <Text key={index} style={styles.errorText}>{error}</Text>
+              <Text key={index} style={styles.errorText}>{error}</Text>
               ))}
             </ScrollView>
           </View>
@@ -876,7 +884,7 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#212121',
+    backgroundColor: '#111217',
   },
   webview: {
     flex: 1,
@@ -907,7 +915,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#212121',
+    backgroundColor: '#111217',
   },
   loadingText: {
     fontSize: 18,
@@ -915,18 +923,25 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   splashScreen: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#181b1f',
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#212121',
+    alignItems: 'center'
   },
   logo: {
-    width: 200,
-    height: 200,
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
   },
   buttonContainer: {
+    flex: 0.2,
     padding: 20,
-    backgroundColor: '#212121',
+    backgroundColor: '#111217',
+    maxHeight: 200,
   },
   buttonGroup: {
     flexDirection: 'row',
@@ -943,7 +958,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   errorFeed: {
-    maxHeight: 100,
+    flex:1,
     marginTop: 10,
   },
   errorText: {
@@ -977,6 +992,7 @@ const styles = StyleSheet.create({
 });
 
 export default App;
+
 
 
 
